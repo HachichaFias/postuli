@@ -262,25 +262,38 @@ A command left at `—` is one the agents cannot run: they say so rather than gu
 
 ## Project conventions
 
-Full detail: `docs/architecture.md`; decisions and rejected options: `docs/decisions/` (ADR 001–008).
+Full detail: `docs/architecture.md`; decisions and rejected options: `docs/decisions/` (current:
+ADR 001, 005, 007–011; 002, 003, 004, 006 are superseded).
 
 ### Stack
-Next.js 16 App Router (TypeScript strict, `@/*` → `src/*`) · Tailwind 4 + shadcn/ui (`base-nova`,
-Base UI) · PostgreSQL 17 + pgvector via Drizzle ORM · Better Auth · Supabase Storage (CVs) · LLM
-through `src/server/llm/` only · Vitest + Playwright · Railway + cron scripts · pnpm 11.
+Next.js 16 App Router as frontend and backend (TypeScript strict, `@/*` → `src/*`) · Tailwind 4 +
+shadcn/ui (`base-nova`, Base UI) · **Supabase as the integrated backend platform**: Supabase Auth,
+Postgres 17 (+ pgvector) through supabase-js with Row Level Security, Storage for CVs, local stack
+via the Supabase CLI · LLM through `src/server/llm/` only · Vitest + Playwright · Railway + cron
+scripts · pnpm 11.
 
 ### Rules
 - **Layering:** Route Handler (`src/app/api/`) or Server Component → `src/server/dal/<domain>.ts` →
-  Drizzle. Route files stay thin; business logic lives in `src/server/` and is tested there.
+  Supabase client. Route files stay thin; business logic lives in `src/server/` and is tested there.
 - **Server-only:** every module in `src/server/` starts with `import "server-only"`. Only
-  `src/server/env.ts` reads `process.env`. Client Components never import from `src/server/`.
-- **Authorization:** in the DAL, with the verified session — never only in `proxy.ts` or a layout.
+  `src/server/env.ts` reads `process.env`. Client Components never import from `src/server/`, and
+  the browser never calls Supabase directly — it calls our Route Handlers.
+- **Two Supabase clients:** `createUserClient()` (`src/server/supabase/server.ts`) for anything done
+  for a signed-in user, so RLS applies; `createAdminClient()` (`src/server/supabase/admin.ts`,
+  bypasses RLS) only in admin scripts, jobs and `events.ts`. Never expose the secret key.
+- **Authorization, twice:** RLS policies on every table, **and** the DAL check with the session
+  validated by Supabase Auth (not a locally decoded JWT) — never only in `proxy.ts` or a layout.
   Another user's resource → 404, wrong role → 403, no session → 401. Return DTOs.
 - **API:** mutations are Route Handlers under `/api` (no Server Actions); zod-validate every body;
   400 `{ errors: { field: message } }` with French messages; 429 when rate limited.
-- **Data:** Drizzle schema in `src/server/db/schema.ts` is the source of truth; snake_case in SQL,
-  camelCase in TS; UUID keys; `timestamptz`; unknown → `null`, never a guess. `pnpm db:generate`
-  then `pnpm db:migrate`; commit a migration separately from the story commit.
+- **Data:** SQL migrations in `supabase/migrations/` are the source of truth (`pnpm db:migration
+  <name>` → SQL → `pnpm db:reset` → `pnpm db:types`); every migration that creates a table enables
+  RLS and adds its policies in the same file. Types come from `pnpm db:types`, never by hand.
+  snake_case in SQL; UUID keys; user references to `auth.users(id)`; `timestamptz`; unknown →
+  `null`, never a guess. Complex queries are SQL functions called with `rpc`. Commit a migration
+  separately from the story commit.
+- **Auth settings:** password policy and rate limits live in `supabase/config.toml` and must match
+  each cloud project's dashboard.
 - **LLM:** only via `src/server/llm/`; zod-validated output; deterministic fallback in every caller;
   never send name, email, phone or address.
 - **Events:** `track()` from `src/server/events.ts`; snake_case names from the stories; no PII in props.
@@ -289,10 +302,13 @@ through `src/server/llm/` only · Vitest + Playwright · Railway + cron scripts 
   `docs/design-system.md`. User-facing copy in French; code, identifiers and commits in English.
 - **Naming:** files kebab-case; components PascalCase; page URLs French (`/profil`, `/recherche`),
   API URLs English (`/api/me/profile`).
-- **Tests:** colocated `*.test.ts(x)` (Vitest); DB tests against `DATABASE_URL_TEST` (run
-  `pnpm db:up` first); e2e in `e2e/*.spec.ts`; mock the LLM and storage gateways, never the database.
+- **Tests:** colocated `*.test.ts(x)` (Vitest) against the local Supabase stack after
+  `pnpm db:reset`; cross-account tests use two test users created with the admin API and the
+  user-scoped client, so RLS is exercised; e2e in `e2e/*.spec.ts`; mock the LLM gateway, never the
+  database.
 - **Commits:** Conventional Commits with the story id — `feat(s01): candidate sign-up and login`.
-- **Local setup:** `cp .env.example .env.local`, `pnpm db:up`, `pnpm db:migrate`, `pnpm dev`.
+- **Local setup:** Docker running → `pnpm db:start` (prints URL and keys) → `cp .env.example
+  .env.local` and paste them → `pnpm db:reset` → `pnpm dev`; `pnpm db:stop` when done.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

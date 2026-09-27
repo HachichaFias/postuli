@@ -1,6 +1,6 @@
 # ADR 004 — CV files in a private Supabase Storage bucket with signed URLs
 
-- Status: accepted
+- Status: superseded by ADR 009
 - Date: 2026-09-27
 - Scope: framing
 

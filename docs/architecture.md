@@ -1,25 +1,29 @@
 # Architecture — Postuli.tn
 
-> Built from the scaffold in this repository (create-next-app 16.3.6 + shadcn init + the stack
-> packages), the PRD and the 19 stories. Structural choices and their rejected alternatives are
-> in `docs/decisions/` (ADR 001–008). Anything not decided here belongs to a story's `/ks-plan`.
+> Built from the scaffold in this repository (create-next-app 16.3.6 + shadcn init + Supabase CLI
+> init), the PRD and the 19 stories. **Stack set by the Product Owner on 27 Sept 2026: Next.js as
+> frontend and backend, Supabase as the integrated backend platform (Auth, Postgres, Storage).**
+> Structural choices and their rejected alternatives are in `docs/decisions/` — the current ones
+> are ADR 001, 005, 007, 008, 009, 010, 011 (002, 003, 004 and 006 are superseded). Anything not
+> decided here belongs to a story's `/ks-plan`.
 
 ## Stack
 | Layer | Choice | Version installed | ADR |
 |---|---|---|---|
-| App framework | Next.js App Router, React Server Components, Turbopack | next 16.3.6, react 19.2.8 | 001 |
+| Frontend + backend | Next.js App Router: pages (React Server Components) and the HTTP API (Route Handlers) in one app | next 16.3.6, react 19.2.8 | 001, 008 |
 | Language | TypeScript, `strict: true`, alias `@/*` → `src/*` | typescript 5.9 | 001 |
 | UI | Tailwind CSS 4 + shadcn/ui (style `base-nova`, built on `@base-ui/react`), icons `lucide-react`, class merging `cn` | tailwindcss 4.3, shadcn 4.21 | 001 |
-| Database | PostgreSQL 17 + pgvector — local: Docker `pgvector/pgvector:pg17`; staging/prod: Supabase Postgres | — | 002 |
-| Data access | Drizzle ORM + `postgres` driver, migrations with drizzle-kit, `casing: "snake_case"` | drizzle-orm 0.45, drizzle-kit 0.31 | 002 |
-| Auth | Better Auth (email/password, sessions, rate limit, `role` field) | better-auth 1.7.6 (wired in s01) | 003 |
-| File storage | Supabase Storage, private `cvs` bucket, signed URLs | added by s04 | 004 |
+| Backend platform | Supabase — local stack via the Supabase CLI (Docker), one cloud project each for staging and production | supabase CLI 2.118 | 009 |
+| Database | Supabase Postgres 17 (+ pgvector when s05 needs it), Row Level Security on every table, SQL migrations in `supabase/migrations/` | — | 009 |
+| Data access | `@supabase/supabase-js` + `@supabase/ssr` from server code only: user-scoped client (RLS applies) and secret-key client (admin scripts, jobs, events) | supabase-js 2.117, ssr 0.12.7 | 009 |
+| Auth | Supabase Auth, email/password, cookie sessions; roles in `profiles.role` | — | 010 |
+| File storage | Supabase Storage, private `cvs` bucket, storage RLS by user folder, signed URLs | — | 009 |
 | LLM | Internal gateway `src/server/llm/` on the Vercel AI SDK, provider from env | added by s04 | 005 |
 | Validation | zod at every boundary (request bodies, CSV rows, LLM output, env) | zod 4.6 | 008 |
-| Tests | Vitest + Testing Library (jsdom), Playwright + `@axe-core/playwright` | vitest 5.0, @playwright/test 1.63 | 006 |
-| Hosting & jobs | Railway (staging + production); cron services run `pnpm job:<name>` via tsx; no queue | tsx 4.23 | 007 |
+| Tests | Vitest + Testing Library (jsdom), Playwright + `@axe-core/playwright`, against the local Supabase stack | vitest 5.0, @playwright/test 1.63 | 011 |
+| Hosting & jobs | Railway (staging + production) for the Next.js app; cron services run `pnpm job:<name>` via tsx; no queue | tsx 4.23 | 007 |
 | Monitoring | Structured JSON logs with request id; Sentry (`@sentry/nextjs`) added with the first staging deploy | — | — |
-| Package manager | pnpm 11 (`pnpm-workspace.yaml` `allowBuilds`: esbuild allowed, sharp/unrs-resolver not) | pnpm 11.18 | — |
+| Package manager | pnpm 11 (`pnpm-workspace.yaml` `allowBuilds`: esbuild and supabase allowed, sharp/unrs-resolver not) | pnpm 11.18 | — |
 
 ## Repo structure
 ```
@@ -30,7 +34,7 @@ postuli/
 │   │   ├── (auth)/              # /connexion, /inscription
 │   │   ├── admin/               # internal operator screens (/admin/sources, /admin/revue, /admin/metriques)
 │   │   ├── api/                 # Route Handlers — the HTTP API (ADR 008)
-│   │   │   ├── auth/[...all]/   # Better Auth handler (s01)
+│   │   │   ├── auth/…           # /api/auth/register, /api/auth/login, /api/auth/logout → Supabase Auth (s01)
 │   │   │   ├── me/…             # /api/me/profile, /api/me/cv, /api/me/saved
 │   │   │   ├── chat/query/      # /api/chat/query
 │   │   │   ├── opportunities/[id]/…
@@ -42,48 +46,62 @@ postuli/
 │   ├── lib/                     # isomorphic code usable client and server: utils.ts (cn), schemas/ (shared zod)
 │   ├── server/                  # server-only (`import "server-only"` at the top of each module)
 │   │   ├── env.ts               # the only reader of process.env
-│   │   ├── db/                  # index.ts (Drizzle client), schema.ts (all tables)
-│   │   ├── auth/                # Better Auth instance, verifySession(), requireAdmin()
+│   │   ├── supabase/            # server.ts (user-scoped client), admin.ts (secret-key client), database.types.ts (generated)
+│   │   ├── auth/                # getSessionUser(), requireAdmin() — validate the session with Supabase Auth
 │   │   ├── dal/                 # Data Access Layer, one file per domain: profile.ts, opportunities.ts, saves.ts…
 │   │   ├── llm/                 # LLM gateway (ADR 005)
-│   │   ├── storage/             # CV bucket access (ADR 004)
+│   │   ├── storage/             # CV bucket access (ADR 009)
 │   │   ├── ingestion/           # normalize, dedupe, fetch policy, extractors
 │   │   ├── search/              # intent parsing, retrieval, ranking, explanation, Truth Guard
-│   │   ├── events.ts            # track() — the funnel event log
+│   │   ├── events.ts            # track() — the funnel event log (secret-key client)
 │   │   └── jobs/                # job functions (verification, purge, crawl)
-│   ├── proxy.ts                 # optimistic auth redirect + x-request-id only (Next 16's renamed Middleware)
-│   └── test/                    # test helpers (server-only stub, db reset, factories)
+│   ├── proxy.ts                 # Supabase session refresh + x-request-id + optimistic redirects (ADR 010)
+│   └── test/                    # test helpers (server-only stub, test users, factories)
+├── supabase/
+│   ├── config.toml              # local stack config — auth password policy and rate limits live here
+│   ├── migrations/              # SQL migrations, one per schema change, each enabling RLS on its tables
+│   └── seed.sql                 # local/test seed data (no real personal data)
 ├── scripts/
 │   ├── jobs/<name>.ts           # cron entry points → src/server/jobs
 │   ├── eval/                    # eval:cv, eval:intent, eval:explanations, eval:dedupe
 │   └── admin-grant.ts           # admin:grant <email> (s02)
 ├── e2e/                         # Playwright specs
-├── drizzle/                     # generated SQL migrations (committed)
-├── docker/, docker-compose.yml  # local Postgres + pgvector, test database
 ├── docs/                        # killer-saas pipeline docs (prd, stories, architecture, decisions, …)
 └── fixtures/                    # anonymized QA sets (CVs, queries, dedupe pairs) — never real CVs
 ```
-Folders under `src/server/` other than `db/` and `env.ts` don't exist yet: each is created by the
-first story that needs it.
+Folders under `src/server/` other than `env.ts` and `supabase/` don't exist yet, nor do
+`supabase/migrations/` and `seed.sql`: each is created by the first story that needs it.
 
 ## Patterns & conventions
-**Layering (ADR 008).** Route Handler / Server Component → `src/server/dal/*` → Drizzle. Route files
-parse input with zod, call `verifySession()` (or `requireAdmin()`), call one DAL function, and map
-the result to a response. Business rules live in `src/server/` and are unit-tested there.
+**Layering (ADR 008).** Route Handler / Server Component → `src/server/dal/*` → Supabase client.
+Route files parse input with zod, resolve the user with `getSessionUser()` (or `requireAdmin()`),
+call one DAL function, and map the result to a response. Business rules live in `src/server/` and
+are unit-tested there.
 
-**Authorization.** Every DAL function takes the verified session and filters by `userId` or checks
-the role. Another user's resource → 404; wrong role → 403; no session → 401 (pages redirect to
-`/connexion`). `proxy.ts` is never the check. DAL functions return DTOs, never raw rows with
-foreign user data.
+**Authorization, twice (ADR 009, 010).** (1) The DAL uses the **user-scoped client**, so every query
+runs as the user and **RLS** filters rows in the database. (2) The DAL still checks ownership and
+role and maps outcomes: another user's resource → 404; wrong role → 403; no session → 401 (pages
+redirect to `/connexion`). The **secret-key client** bypasses RLS and is only allowed in
+`src/server/supabase/admin.ts` callers that are admin scripts, jobs or `events.ts`. Sessions are
+validated with Supabase Auth, never trusted from a locally decoded JWT alone. `proxy.ts` is never
+the check.
+
+**RLS rules.** Every migration that creates a table enables RLS on it in the same migration and adds
+its policies. User-owned tables: `using (user_id = auth.uid())` for select/update/delete and
+`with check (user_id = auth.uid())` for insert. Admin tables: policies check the caller's
+`profiles.role = 'admin'` through a `security definer` helper (`is_admin()`). A table without
+policies is unreadable, which is the safe default.
 
 **HTTP contract.** JSON bodies. Validation error → 400 `{ errors: { field: message } }` with French
 messages. Rate limited → 429. Every handler is wrapped so the request is logged with request id,
 route, status and duration, without body (s01).
 
-**Data.** Tables and columns snake_case (Drizzle `casing: "snake_case"`), TypeScript camelCase.
-Primary keys are UUIDs. Timestamps are `timestamptz`. Unknown optional values are `null`, never a
-guessed default (PRD data rules). Migrations: `pnpm db:generate` then `pnpm db:migrate`; a
-migration is committed separately from the story commit.
+**Data.** Tables and columns snake_case; TypeScript types come from `pnpm db:types` (never
+hand-written). Primary keys are UUIDs (`gen_random_uuid()`); user references point to
+`auth.users(id)`. Timestamps are `timestamptz`. Unknown optional values are `null`, never a guessed
+default (PRD data rules). Schema changes: `pnpm db:migration <name>` → write SQL → `pnpm db:reset`
+→ `pnpm db:types`; a migration is committed separately from the story commit. Queries beyond the
+query builder (hard-constraint retrieval, metrics) are SQL functions called with `rpc`.
 
 **AI calls.** Only through `src/server/llm/`; every output validated by a zod schema, every caller
 has a deterministic fallback, PII (name, email, phone, address) never sent (ADR 005).
@@ -91,60 +109,70 @@ has a deterministic fallback, PII (name, email, phone, address) never sent (ADR 
 **Events.** `track(name, userId, props)` from `src/server/events.ts`; event names snake_case as
 listed in the stories; props never contain email, name or CV content.
 
-**UI.** Server Components by default; `"use client"` only for interactive leaves. Compose shadcn/ui
-primitives from `src/components/ui/`; add new ones with `pnpm dlx shadcn add <name>`, never by
-hand. Tokens and components come from `docs/design-system.md` (/ks-design-system). All
-user-facing copy is French; code, identifiers and commits are English. `<html lang="fr">`.
+**UI.** Server Components by default; `"use client"` only for interactive leaves. The browser never
+talks to Supabase directly: it calls our Route Handlers. Compose shadcn/ui primitives from
+`src/components/ui/`; add new ones with `pnpm dlx shadcn add <name>`, never by hand. Tokens and
+components come from `docs/design-system.md` (/ks-design-system). All user-facing copy is French;
+code, identifiers and commits are English. `<html lang="fr">`.
 
 **Naming.** Files and folders kebab-case (`opportunity-card.tsx`); React components PascalCase;
 functions camelCase; URL segments French for pages, English for `/api`.
 
-**Tests (ADR 006).** Colocated `*.test.ts(x)`; integration tests use `DATABASE_URL_TEST` (local
-`postuli_test`); e2e in `e2e/*.spec.ts`. Mock the LLM and storage gateways, never the database.
+**Tests (ADR 011).** Colocated `*.test.ts(x)`; integration tests run against the local Supabase stack
+after `pnpm db:reset`; cross-account tests sign in two test users created with the admin API and go
+through the user-scoped client so RLS is exercised; e2e in `e2e/*.spec.ts`. Mock the LLM gateway,
+never the database.
 
 **Commits.** Conventional Commits prefixed with the story id: `feat(s01): candidate sign-up and login`.
 
+**Local setup.** Docker running → `pnpm db:start` (prints the local URL and keys) → copy them into
+`.env.local` from `.env.example` → `pnpm db:reset` → `pnpm dev`. `pnpm db:stop` when done.
+
 ## Data model
-Entities, each created by the story in brackets. Relations: `user 1—1 career_profile`,
-`user 1—n cv_document`, `source 1—n opportunity_source n—1 opportunity`, `user 1—n conversation
-1—n search_query`, per-user join tables for saves, hides and feedback.
+Entities, each created by the story in brackets, all in the `public` schema with RLS on. Relations:
+`auth.users 1—1 profiles`, `auth.users 1—1 career_profiles`, `auth.users 1—n cv_documents`,
+`sources 1—n opportunity_sources n—1 opportunities`, `auth.users 1—n conversations 1—n
+search_queries`, per-user join tables for saves, hides and feedback.
 
-| Entity | Key fields | Story |
-|---|---|---|
-| user, session, account, verification | Better Auth tables; `user.role` (`candidate` \| `admin`), privacy notice accepted at | s01 |
-| event | name, pseudonymous user id, occurred at, props (jsonb, no PII) | s01 |
-| source | name, base URL, kind (company, university, incubator, community, job board), rights status | s02 |
-| opportunity | title, type, organization, location, remote policy, skills[], published at, valid through, canonical URL, description excerpt, content hash, confidence, extraction method, status (`active`, `pending_review`, `rejected`, `inactive`, `expired`), discovered at, last verified at | s02 (statuses extended in s13, s15) |
-| opportunity_source | opportunity ↔ source with its own URL and discovered at (provenance kept on merge) | s02 (grouping in s14) |
-| audit_log | actor, action, target, reason, at | s02 |
-| career_profile | target roles, skills, locations, remote preference, opportunity types, experiences, education, languages, availability — each field with its origin (`user_entered` \| `cv_extracted`) | s03 |
-| cv_document | user, storage path, consent at, parse status, parse duration | s04 |
-| conversation, search_query | user; structured intent (jsonb), refinement flag, clarification asked | s05 (context in s09) |
-| result_impression | user, query, opportunity, position, per-factor contributions, ranking version | s05 (factors in s10) |
-| saved_opportunity, hidden_opportunity | user + opportunity, unique pair | s08 |
-| match_reason | impression, text, profile field, opportunity field, kind (reason \| gap) | s11 |
-| feedback | user, opportunity, query, relevance, novelty (unique per triple) | s12 |
-| verification_run | source, attempted, succeeded, at | s15 |
-| contribution | contributor (nullable after deletion), URL, opportunity, status | s19 |
+| Entity | Key fields | RLS | Story |
+|---|---|---|---|
+| auth.users, auth.sessions | Managed by Supabase Auth | Supabase-managed | s01 |
+| profiles | id (= auth.users.id), role (`candidate` \| `admin`), privacy notice accepted at | own row read-only; role never user-writable | s01 |
+| events | name, pseudonymous user id, occurred at, props (jsonb, no PII) | no user access; secret key only | s01 |
+| sources | name, base URL, kind (company, university, incubator, community, job board), rights status | admin only | s02 |
+| opportunities | title, type, organization, location, remote policy, skills[], published at, valid through, canonical URL, description excerpt, content hash, confidence, extraction method, status (`active`, `pending_review`, `rejected`, `inactive`, `expired`), discovered at, last verified at | candidates read `active` (+ saved ones); admins all | s02 (statuses extended in s13, s15) |
+| opportunity_sources | opportunity ↔ source with its own URL and discovered at (provenance kept on merge) | readable with its opportunity; admin writes | s02 (grouping in s14) |
+| audit_log | actor, action, target, reason, at | admin read; secret-key write | s02 |
+| career_profiles | target roles, skills, locations, remote preference, opportunity types, experiences, education, languages, availability — each field with its origin (`user_entered` \| `cv_extracted`) | own row | s03 |
+| cv_documents | user, storage path, consent at, parse status, parse duration | own rows | s04 |
+| conversations, search_queries | user; structured intent (jsonb), refinement flag, clarification asked | own rows | s05 (context in s09) |
+| result_impressions | user, query, opportunity, position, per-factor contributions, ranking version | own rows | s05 (factors in s10) |
+| saved_opportunities, hidden_opportunities | user + opportunity, unique pair | own rows | s08 |
+| match_reasons | impression, text, profile field, opportunity field, kind (reason \| gap) | own rows (through impression) | s11 |
+| feedback | user, opportunity, query, relevance, novelty (unique per triple) | own rows | s12 |
+| verification_runs | source, attempted, succeeded, at | admin read; secret-key write | s15 |
+| contributions | contributor (nullable after deletion), URL, opportunity, status | own rows; admin all | s19 |
 
-pgvector columns (role/skill embeddings) are added only if s05's research shows SQL filters alone
-miss relevant results.
+Storage: bucket `cvs` (private), objects `<user id>/<cv id>.pdf`, storage policies restrict each user
+to their own folder (s04). pgvector columns (role/skill embeddings) are added only if s05's research
+shows SQL filters alone miss relevant results.
 
 ## Integration points
 | Integration | Purpose | Where | Story |
 |---|---|---|---|
-| Better Auth | Sign-up, login, sessions, rate limit, roles | `src/server/auth/`, `/api/auth/[...all]` | s01 |
-| PostgreSQL (Supabase in prod) | All data | `src/server/db/` | s01+ |
+| Supabase Auth | Sign-up, login, sessions, password policy, rate limit | `src/server/auth/`, `/api/auth/*`, `proxy.ts`, `supabase/config.toml` | s01 |
+| Supabase Postgres | All data, RLS | `src/server/supabase/`, `src/server/dal/`, `supabase/migrations/` | s01+ |
 | Supabase Storage | Private CV bucket, signed URLs | `src/server/storage/` | s04 |
 | LLM provider (via gateway) | CV extraction, intent, explanations, page extraction | `src/server/llm/` | s04, s06, s11, s18 |
 | Public source websites | Verification and crawl under the fetch policy (robots.txt, ≥5 s per domain, identified user agent, no login/CAPTCHA) | `src/server/ingestion/` | s15, s18, s19 |
 | Railway cron | Verification (daily), retention purge, optional crawl | `scripts/jobs/` | s15, s16, s18 |
 | Sentry | Error reporting | `@sentry/nextjs` | first staging deploy |
-| Email | None in P0 (no verification email, no alerts) | — | — |
+| Email | None in P0 (email confirmation off, no alerts) | — | — |
 | Payments | None (graveyard) | — | — |
 
 Environment variables are listed in `.env.example`; each story adds its keys there and to
-`src/server/env.ts`.
+`src/server/env.ts`. Supabase Auth settings (password length, rate limits) must be set identically
+in `supabase/config.toml` and in each cloud project's dashboard.
 
 ## Design / UX
 Mobile-first responsive web, French UI, brand from the PRD (Coral CTA, Navy structure, Azure

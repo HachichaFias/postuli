@@ -4,8 +4,12 @@
 > Id format: `s<number>-<short-slug>` — reused in every pipeline file and in the branch name.
 
 Source: [docs/prd.md](prd.md). Product UI is **French**; requests are understood in FR (and AR per
-decision D1). Stack, folders and conventions come from `docs/architecture.md` (`/ks-architect`) —
-no story assumes a file layout before it exists. API paths are the PRD §13.3 surface.
+decision D1). **Stack:** Next.js (frontend and backend: pages + Route Handlers) with Supabase as
+the integrated backend platform — Supabase Auth, Postgres (+ pgvector) accessed with supabase-js,
+Row Level Security on every table, Supabase Storage for CVs. Folders and conventions come from
+`docs/architecture.md` (`/ks-architect`) — no story assumes a file layout before it exists. API
+paths are the PRD §13.3 surface. **Cross-account criteria ("cannot read another candidate's …")
+are enforced twice:** an RLS policy on the table, and the ownership check in the server code.
 
 ## Calendar — 2.5 weeks
 
@@ -14,7 +18,7 @@ Day 1 = Sun 27 Sept 2026 · **Checkpoint Day 9 = Mon 5 Oct** · **Release candid
 | Window | Stories | Exit |
 |---|---|---|
 | Days 1–9 — core journey | s01 → s08 | PRD §18.3 scenario #1 passes end to end: FR CV → profile → "PFE data Tunis" → cards → open source → save |
-| Days 1–15 — supply track (parallel, Oussama + admin) | s02, then s13 → s15 | ≥40 active curated opportunities, dedupe and freshness running |
+| Days 1–15 — supply track (parallel, Oussama + admin) | s02 (Days 1–4), then s13 → s15 once s05, s07 and s08 have shipped | ≥40 active curated opportunities, dedupe and freshness running |
 | Days 10–16 — quality, privacy, instrumentation | s09 → s12, s16, s17 | All P0 stories shipped |
 | Days 14–16 — only if the Day 9 checkpoint was green | s18, then s19 | — |
 | Days 17–18 — release | no new story | Release gates below measured; bugfix only |
@@ -29,8 +33,8 @@ Acceptance criteria refer to these by name; change a value here, not in the stor
 
 | Name | Value | Used by |
 |---|---|---|
-| Password policy | ≥ 8 characters | s01 |
-| Auth rate limit | 10 attempts per 15 min per IP and per email → HTTP 429 | s01 |
+| Password policy | ≥ 8 characters (Supabase Auth `minimum_password_length = 8`) | s01 |
+| Auth rate limit | 10 sign-in + sign-up requests per 5 min per IP → HTTP 429 (Supabase Auth `sign_in_sign_ups = 10`; Supabase has no per-email limit) | s01 |
 | Description excerpt | ≤ 500 characters | s02 |
 | Opportunity types | `pfe`, `stage`, `emploi` (labels PFE, Stage, Emploi) | s02, s03, s05 |
 | Known locations | Tunis, Ariana, Ben Arous, Manouba, Sfax, Sousse, Monastir, Nabeul, Bizerte, other | s03, s05 |
@@ -68,7 +72,7 @@ at release on real data. Each dataset has an owner and a due date so no story wa
 | Onboarding median ≤ 5 min | 10 moderated tests | s03, s04 (timestamps in events) | — Yasmine — Days 16–17 |
 | ≥ 40 active curated opportunities, provenance ≥ 95% | s17 supply metrics | s02, s17 | 5–10 approved sources — Oussama — Day 8 |
 | Funnel analytics verified E2E | journey fixture test | s17 | — |
-| 0 cross-account access | authorization tests in each story | s01, s03, s05, s08, s12 | — |
+| 0 cross-account access | authorization tests in each story | s01, s03, s05, s08, s11, s12 | — |
 | Privacy notice, CV consent, takedown process | s01, s04, s13 | — | privacy notice text — Firas — Day 3 |
 
 ## Order and dependencies
@@ -79,7 +83,7 @@ at release on real data. Each dataset has an owner and a due date so no story wa
 | 2 | s02-admin-opportunity-import | F4 · SUP-01, DATA-01 | 4 | s01 |
 | 3 | s03-career-profile | F3 · PROF-02 | 2 | s01 |
 | 4 | s04-cv-upload-profile-prefill | F2 · PROF-01 | 4 | s03 |
-| 5 | s05-search-opportunity-cards | F3, F5, F6, F7, F8 · PROF-03, RET-01, RES-01 | 3 | s02, s03 |
+| 5 | s05-search-opportunity-cards | F3, F5, F6, F7, F8 · PROF-03, RET-01, RES-01 | 4 | s02, s03 |
 | 6 | s06-natural-language-intent | F5 · CHAT-01 | 4 | s05 |
 | 7 | s07-opportunity-detail | F7 · DATA-03 | 2 | s05 |
 | 8 | s08-save-hide-opportunity | F8 · SAVE-01 | 2 | s07 |
@@ -87,11 +91,11 @@ at release on real data. Each dataset has an owner and a due date so no story wa
 | 10 | s10-ranking-v0-match-bands | F6 · RANK-01 | 3 | s05 |
 | 11 | s11-grounded-match-explanation | F6 · EXPL-01 | 4 | s10 |
 | 12 | s12-relevance-novelty-feedback | F9 · AN-01 | 2 | s10 |
-| 13 | s13-admin-review-queue | F4 · ADMIN-01 | 3 | s02 |
+| 13 | s13-admin-review-queue | F4 · ADMIN-01 | 3 | s02, s05 |
 | 14 | s14-cross-source-dedupe | F4 · DATA-02 | 3 | s02, s07 |
 | 15 | s15-freshness-verification | F4, F7 · DATA-03 | 3 | s02, s08 |
 | 16 | s16-delete-account-data | Privacy · NFR-PRIV-01 | 3 | s04, s08, s09, s11, s12 |
-| 17 | s17-funnel-supply-analytics-export | F9 · AN-01 | 2 | s09, s12, s14, s15 |
+| 17 | s17-funnel-supply-analytics-export | F9 · AN-01 | 2 | s04, s09, s12, s14, s15 |
 | 18 | s18-whitelist-source-crawl *(freezable)* | F4 · SUP-01 | 4 | s13, s14, s15 |
 | 19 | s19-contribute-opportunity-url *(Should)* | F10 · CONTRIB-01 | 3 | s16, s18 |
 
@@ -111,7 +115,7 @@ at release on real data. Each dataset has an owner and a due date so no story wa
 - [ ] The session survives a page reload; logging out invalidates it (a request with the old session is rejected).
 - [ ] An unauthenticated visit to any candidate page redirects to login.
 - [ ] Exceeding the *Auth rate limit* on login or sign-up returns HTTP 429.
-- [ ] The current-user endpoint returns only the caller's own account; no endpoint accepts another user's id to read their data.
+- [ ] The current-user endpoint takes no user id parameter and returns only the caller's own account; a request with another session returns that session's account, never the first one. (Each later story carries its own cross-account criterion for the endpoints it adds.)
 - [ ] A `signup_completed` event is recorded with a pseudonymous user id and timestamp, and no email or name in its payload.
 - [ ] Every API request is logged with request id, route, status code and duration in ms, and no request body.
 
@@ -119,9 +123,11 @@ at release on real data. Each dataset has an owner and a due date so no story wa
 None — first story.
 
 ### Agentic notes
-- PRD recommends managed auth (Supabase Auth); `/auth/register`, `/auth/login` are the PRD §13.3 surface. If custom passwords are ever stored: Argon2id or bcrypt cost ≥12 (PRD §13.7).
-- The **event log** (event name, pseudonymous user id, timestamp, JSON properties without PII) is created here because `signup_completed` needs it; every later story appends its own events. The request log is the data source for the non-AI API p95 gate.
-- A `role` on the account (`candidate` by default) is introduced here; s02 adds `admin`.
+- Supabase Auth (email/password) with `@supabase/ssr` cookie sessions; the PRD §13.3 `/auth/register` and `/auth/login` are Route Handlers calling it. Password policy and rate limit are Supabase Auth settings (`supabase/config.toml` locally, dashboard in staging/prod) — set them to the pinned values. Passwords are never stored by us.
+- The **event log** (event name, pseudonymous user id, timestamp, JSON properties without PII) is created here because `signup_completed` needs it; every later story appends its own events. RLS: no candidate can read the table; only server code with the secret key writes and reads it. The request log is the data source for the non-AI API p95 gate.
+- An app-side `profiles` row (id = `auth.users.id`) holds `role` (`candidate` by default), created on sign-up; s02 adds `admin`. RLS lets a user read only their own row and never change `role`.
+- Trap: after logout, verify the old access token is really rejected — authorization checks must validate the session with Supabase Auth, not only decode the JWT locally (a decoded JWT stays valid until it expires).
+- Trap: the rate limit is per IP, so a test suite signing users up through the public endpoint trips it from localhost; create test users with the admin API (secret key), and keep public sign-up calls for the tests that assert the 429.
 - The home page is a shell: s03 turns it into the onboarding entry point.
 - Target reference: TanitJobs / Keejob candidate sign-up.
 - Trap: never log passwords, tokens or emails in structured logs or Sentry breadcrumbs.
@@ -139,6 +145,7 @@ None — first story.
 - [ ] Only accounts with the `admin` role reach admin pages and endpoints; a candidate receives 403.
 - [ ] An operator creates a source with name, base URL, source kind (company, university, incubator, community, job board) and a rights-review status; a source whose rights review is not `approved` cannot receive imports.
 - [ ] An operator imports opportunities for a source from a CSV file; each accepted row is stored with the canonical fields: title, type, organization, location, remote_policy, skills[], published_at, valid_through, canonical_url, source_id, discovered_at (set at import), extraction_method = `manual`, confidence, content_hash, status = `active`.
+- [ ] `confidence` comes from an optional CSV column (a number from 0 to 1); a row without it gets 1.0, because the operator curated it. This is provenance metadata, not an opportunity fact, so the "null, never a guess" rule doesn't apply to it; a value outside 0–1 rejects the row.
 - [ ] A row missing title, type or canonical_url is rejected and reported with its line number; the other rows of the file are imported.
 - [ ] Optional fields absent from the input are stored as null, never filled with a default guess.
 - [ ] `type` only accepts the *Opportunity types*; any other value rejects the row.
@@ -154,6 +161,7 @@ s01 (accounts and roles).
 - The guaranteed path to the corpus gate (≥40 active opportunities from 5–10 sources, Day 8); Oussama curates the CSVs. s18 (crawl) is optional on top of it.
 - Canonical schema: PRD §11.1 / context §7.3. Data rules §11.2: null over invention, no long original description without a legal basis, canonical URL stays attached, no silent rewrite.
 - `content_hash` = hash of normalized title + organization + location; s14 uses it for dedupe.
+- `admin:grant` runs server-side with the Supabase secret key and updates `profiles.role`; RLS policies on `sources`, `opportunities` and `audit_log` allow writes only to admins, and candidates can read only `active` opportunities.
 - Admin screens stay internal and minimal (PRD §13.3); brand styling is enough.
 - Target reference: Optioncarriere keeps a source link on every ad; mirror that provenance.
 
@@ -210,6 +218,7 @@ s03 (profile record, form and field origins).
 
 ### Agentic notes
 - API: `POST /me/cv` (upload + parse). LLM behind the configurable gateway; validate its JSON against a schema before use.
+- Storage: private Supabase Storage bucket `cvs`, object path `<user id>/<cv id>.pdf`; storage RLS policies allow a user only their own folder; downloads only through short-lived signed URLs created by the server.
 - Release gates (not test assertions): ≥90% on essential fields, upload + parse p95 <20 s. The 20-CV set is due Day 4 (Oussama), anonymized; never commit a real candidate CV.
 - Show progress states during parsing, not a frozen screen.
 - PDF only in P0 (PRD §10.2).
@@ -221,7 +230,7 @@ s03 (profile record, form and field origins).
 **As a** candidate **I want** to type what I'm looking for and get a few matching opportunity cards with their source **so that** I find relevant opportunities without a filter form. **UI**
 
 ### Complexity
-3 — rule-based intent, profile merge, hard-constraint retrieval and the cards UI; no LLM (that is s06). Schedule risk: this is the walking skeleton of the Day 9 journey, with the most criteria of any story — start it no later than Day 5.
+4 — **risk:** schedule. This is the walking skeleton of the Day 9 journey and spans five features (F3, F5–F8): rule-based intent, profile merge, hard-constraint retrieval, cards, source link, events and conversation ownership. No LLM (that is s06). Start it no later than Day 5; if its plan passes ten tasks, split the conversation persistence out before executing.
 
 ### Acceptance criteria
 - [ ] The chat screen asks "Que cherches-tu ?" with example suggestion chips; no filter form is shown.
@@ -241,7 +250,7 @@ s02 (corpus), s03 (Career Profile as context).
 ### Agentic notes
 - This story owns the "only `active` is ever returned" rule; s13 and s15 add statuses and rely on it.
 - API: `POST /chat/query`. Intent shape: PRD §9.2 (`opportunity_types`, `roles`, `locations`, `organization_preference`, `start_period`, `hard_constraints`, `soft_preferences`); s06 produces the same shape through the LLM and falls back to this parser.
-- Retrieval = SQL filters on hard constraints (+ optional pgvector similarity on role/skills), never LLM-picked items. Ordering is temporary; s10 replaces it.
+- Retrieval = SQL filters on hard constraints (a Postgres function called through supabase-js `rpc` if the filter outgrows the query builder; + optional pgvector similarity on role/skills), never LLM-picked items. Ordering is temporary; s10 replaces it.
 - Target reference: Optioncarriere / Keejob search results, shown as chat + cards (context §5.1).
 - Trap: "Grand Tunis" / "Ariana" vs "Tunis" — map every alias to *Known locations* or hard constraints will over-filter.
 
@@ -281,7 +290,7 @@ s05 (intent shape, rule-based fallback, retrieval and cards).
 2 — read view + outbound link + event.
 
 ### Acceptance criteria
-- [ ] "Voir" on a card opens a detail view with every known canonical field, the source list (name, canonical URL, discovered_at) and last_verified_at; unknown fields show "Non précisé".
+- [ ] "Voir" on a card opens a detail view with every known canonical field, the source list (name, canonical URL, discovered_at), and last_verified_at when known; unknown fields show "Non précisé".
 - [ ] "Voir la source" in the detail opens the canonical URL in a new tab and records `opportunity_opened` with origin `detail`.
 - [ ] An unknown opportunity id shows a not-found page, not a crash.
 - [ ] `GET /opportunities/{id}` requires an authenticated session.
@@ -361,7 +370,7 @@ s06 (intent produced from free text; follow-ups are applied to it).
 - [ ] Fixture: with a profile containing Node.js and PostgreSQL, an opportunity requiring both ranks above one requiring neither, all other factors equal.
 - [ ] An opportunity already shown to the candidate in an earlier search ranks below an equally matching unseen one; unseen ones carry the label "Nouvelle pour toi".
 - [ ] A skill absent from both the profile and the opportunity data contributes nothing to the score.
-- [ ] After a profile correction (s03), the next search's ranking reflects it.
+- [ ] Fixture: after the candidate adds the skill Docker to their profile (s03), an opportunity requiring Docker ranks above an otherwise identical one that doesn't, in the next search.
 
 ### Dependencies
 s05 (retrieval and cards).
@@ -382,6 +391,7 @@ s05 (retrieval and cards).
 ### Acceptance criteria
 - [ ] Each card shows up to 4 match reasons and up to 2 gaps (e.g. "△ Docker demandé"); when fewer than 2 grounded reasons exist, it shows the ones available followed by "Information non disponible".
 - [ ] Every reason is stored with the profile field and the opportunity field it relies on.
+- [ ] A candidate cannot read another candidate's stored match reasons (403/404).
 - [ ] The Truth Guard rejects any model output citing a skill or experience absent from the Career Profile, and the card falls back to deterministic reasons (mocked response containing an invented candidate skill).
 - [ ] The Truth Guard rejects any reason or gap citing a requirement absent from the opportunity's fields, and the card falls back to deterministic reasons (mocked response with the gap "Docker demandé" on an opportunity that never mentions Docker).
 - [ ] Model output failing JSON-schema or allowed-field validation falls back to deterministic reasons.
@@ -432,15 +442,16 @@ s10 (novelty factor in ranking).
 3 — several states (`pending_review`, `active`, `rejected`, `inactive`), source-level takedown, audit.
 
 ### Acceptance criteria
-- [ ] An import row (s02) whose `confidence` column is below the *Confidence threshold*, or that the operator flags "à vérifier", is stored as `pending_review` instead of `active`.
+- [ ] This story amends s02's import: a row whose `confidence` is below the *Confidence threshold*, or that the operator flags "à vérifier", is stored as `pending_review` instead of `active`.
+- [ ] A candidate requesting the detail of a `pending_review` or `rejected` opportunity by id (`GET /opportunities/{id}`) gets 404; an admin can still open it.
 - [ ] The review queue lists `pending_review` items with source, fields, confidence and a link to the original page.
 - [ ] Approving (optionally after editing fields) sets the item `active`; rejecting with a reason sets it `rejected`.
 - [ ] An operator can deactivate an active opportunity or a whole source (takedown); its opportunities disappear from candidate results on the next search.
 - [ ] Every decision and takedown writes an audit log entry with actor, action, reason and time.
-- [ ] `docs/ops/takedown.md` describes how a takedown request is received, the response delay, and the admin action that executes it.
+- [ ] *(Manual check at review, not an automated test)* `docs/ops/takedown.md` describes how a takedown request is received, the response delay, and the admin action that executes it.
 
 ### Dependencies
-s02 (sources, import, admin role, audit log).
+s02 (sources, import, admin role, audit log), s05 (candidate retrieval, needed to test that a takedown removes results).
 
 ### Agentic notes
 - ADMIN-01. Exclusion of non-active items from results is s05's rule; s18 (crawl) only feeds the queue.
@@ -493,7 +504,7 @@ s02 (corpus), s08 (saved list).
 ### Agentic notes
 - DATA-03; data rule §11.2 #6. SLO: stale rate ≤10%. No queue infrastructure (graveyard): an in-process scheduled job or a platform cron.
 - The fetch policy (robots.txt, delay, user agent, no login/CAPTCHA) is built here as a reusable helper; s18 reuses it.
-- Trap: some career pages return 200 on a "position filled" page; only treat a missing JobPosting as removed when the item was extracted from JSON-LD.
+- Trap: some career pages return 200 on a "position filled" page. Until s18 exists every item is `extraction_method = manual`, so a 200 means live; the extra check (a missing JobPosting means removed) applies only to items with `extraction_method = jsonld`, once s18 produces them.
 - Target reference: Optioncarriere / TanitJobs expire ads by date only; Postuli re-verifies the source.
 
 ---
@@ -517,6 +528,7 @@ s04 (CV file), s08 (saves, hides), s09 (conversation context), s11 (stored match
 
 ### Agentic notes
 - NFR-PRIV-01; law 2004-63 / INPDP (context §19). Retention is decision D5, still open: read it from config.
+- Deletion uses the Supabase admin API (`auth.admin.deleteUser`) and removes the user's `cvs/<user id>/` folder from Storage; app tables reference `auth.users` with `on delete cascade` where the data must go, and events keep only the pseudonymous id.
 - s19, if built, adds contributions to this deletion.
 - Target reference: TanitJobs / LinkedIn account closure.
 
@@ -536,7 +548,7 @@ s04 (CV file), s08 (saves, hides), s09 (conversation context), s11 (stored match
 - [ ] A candidate calling the export or metrics endpoints receives 403.
 
 ### Dependencies
-s09 (`clarification_asked`), s12 (feedback events), s14 (duplicate groups), s15 (stale rate, verification runs).
+s04 (`cv_uploaded`), s09 (`clarification_asked`), s12 (feedback events), s14 (duplicate groups), s15 (stale rate, verification runs).
 
 ### Agentic notes
 - AN-01; KPI formulas: context §15.2. "Funnel analytics verified E2E" and provenance ≥95% are release gates; the journey fixture test is the proof.

@@ -1,6 +1,6 @@
 # ADR 003 — Better Auth for authentication, sessions and roles
 
-- Status: accepted
+- Status: superseded by ADR 010
 - Date: 2026-09-27
 - Scope: framing
 

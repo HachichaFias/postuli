@@ -110,10 +110,12 @@ UI with FR/AR request understanding (full RTL later), responsive at 360/768/1440
   provenance, save, instrumentation, profile correction, curation, dedupe, freshness or data
   deletion.
 - **Days 17–18:** release gates measured, bugfix only, release candidate on Day 18.
-- **Recommended stack (to be locked by /ks-architect):** React 19 + Vite + TypeScript + Tailwind
-  + TanStack Query; Node 24 + Express + TypeScript; PostgreSQL + pgvector; Supabase Auth; storage
-  Supabase Storage (private bucket); configurable LLM gateway (interchangeable provider);
-  multilingual-e5-small embeddings; Railway hosting; Sentry + structured logs. No microservices.
+- **Stack (decided 27 Sept 2026, replaces the PRD's React + Vite / Express recommendation):**
+  Next.js as frontend and backend (TypeScript, Tailwind, shadcn/ui); Supabase as the integrated
+  backend platform — Supabase Auth, PostgreSQL + pgvector through supabase-js with Row Level
+  Security, Supabase Storage (private CV bucket); configurable LLM gateway (interchangeable
+  provider); Railway hosting; Sentry + structured logs. No microservices. Details and rejected
+  options: `docs/architecture.md` and `docs/decisions/` in the code repository.
 - **Legal:** Tunisian organic law 2004-63 / INPDP; robots.txt, rate limits and ToS review for
   every source; no long original descriptions copied without a legal basis; takedown process.
 - **Brand:** Coral #FF6265 (primary CTA), Navy #192038 (structure), Azure #2563EB (info/source),

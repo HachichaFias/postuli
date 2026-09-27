@@ -1,6 +1,6 @@
 # ADR 002 — PostgreSQL + pgvector through Drizzle ORM
 
-- Status: accepted
+- Status: superseded by ADR 009
 - Date: 2026-09-27
 - Scope: framing
 

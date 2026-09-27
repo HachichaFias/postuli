@@ -1,6 +1,6 @@
 # ADR 006 — Vitest for unit/integration tests, Playwright for end-to-end
 
-- Status: accepted
+- Status: superseded by ADR 011
 - Date: 2026-09-27
 - Scope: framing
 
