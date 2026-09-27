@@ -6,8 +6,8 @@ services:
       POSTGRES_USER: postuli
       POSTGRES_PASSWORD: postuli
       POSTGRES_DB: postuli
-    ports:
-      - "5432:5432"
+    ports:  # 5433 on the host: a native PostgreSQL often holds 5432 on Windows
+      - "5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./docker/db-init.sql:/docker-entrypoint-initdb.d/db-init.sql:ro
